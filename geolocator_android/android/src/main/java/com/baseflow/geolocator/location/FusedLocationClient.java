@@ -67,19 +67,21 @@ class FusedLocationClient implements LocationClient {
               return;
             }
 
-            Location location = locationResult.getLastLocation();
-            if (location == null) {
-              return;
-            }
-            if (location.getExtras() == null) {
-              location.setExtras(Bundle.EMPTY);
-            }
-            if (locationOptions != null) {
-              location.getExtras().putBoolean(LocationOptions.USE_MSL_ALTITUDE_EXTRA, locationOptions.isUseMSLAltitude());
-            }
+            new Thread(() -> {
+              Location location = locationResult.getLastLocation();
+              if (location == null) {
+                return;
+              }
+              if (location.getExtras() == null) {
+                location.setExtras(Bundle.EMPTY);
+              }
+              if (locationOptions != null) {
+                location.getExtras().putBoolean(LocationOptions.USE_MSL_ALTITUDE_EXTRA, locationOptions.isUseMSLAltitude());
+              }
 
-            nmeaClient.enrichExtrasWithNmea(location);
-            positionChangedCallback.onPositionChanged(location);
+              nmeaClient.enrichExtrasWithNmea(location);
+              positionChangedCallback.onPositionChanged(location);
+            }).start();
           }
 
           @Override
