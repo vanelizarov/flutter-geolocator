@@ -129,10 +129,20 @@ class GeolocatorAndroid extends GeolocatorPlatform {
       final parameters = <String, dynamic>{
         'requestId': requestId,
       };
-      _methodChannel.invokeMethod(
-        'cancelGetCurrentPosition',
-        parameters,
-      );
+      // Await the cancel reply so that the Dart reply port is kept alive until
+      // Java has finished processing the method call. Without the await the port
+      // can be closed (e.g. during engine teardown triggered by the rethrow
+      // below) before Java calls result.success(null), which causes Flutter to
+      // abort with "Check failed: did_send." in
+      // platform_message_response_dart_port.cc.
+      try {
+        await _methodChannel
+            .invokeMethod('cancelGetCurrentPosition', parameters)
+            .timeout(const Duration(seconds: 5));
+      } catch (_) {
+        // Ignore any error from the cancel call itself (e.g. channel already
+        // gone during engine shutdown).
+      }
       rethrow;
     } on PlatformException catch (e) {
       final error = _handlePlatformException(e);
