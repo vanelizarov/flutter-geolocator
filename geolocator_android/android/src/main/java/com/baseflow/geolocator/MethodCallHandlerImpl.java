@@ -41,6 +41,7 @@ class MethodCallHandlerImpl implements MethodChannel.MethodCallHandler {
   private final LocationAccuracyManager locationAccuracyManager;
 
   @VisibleForTesting final Map<String, LocationClient> pendingCurrentPositionLocationClients;
+  @VisibleForTesting final Map<String, boolean[]> pendingCurrentPositionReplyFlags;
 
   @Nullable private Context context;
 
@@ -54,6 +55,7 @@ class MethodCallHandlerImpl implements MethodChannel.MethodCallHandler {
     this.geolocationManager = geolocationManager;
     this.locationAccuracyManager = locationAccuracyManager;
     this.pendingCurrentPositionLocationClients = new HashMap<>();
+    this.pendingCurrentPositionReplyFlags = new HashMap<>();
   }
 
   @Nullable private MethodChannel channel;
@@ -237,6 +239,7 @@ class MethodCallHandlerImpl implements MethodChannel.MethodCallHandler {
     LocationClient locationClient =
         geolocationManager.createLocationClient(context, forceLocationManager, locationOptions);
     pendingCurrentPositionLocationClients.put(requestId, locationClient);
+    pendingCurrentPositionReplyFlags.put(requestId, replySubmitted);
 
     geolocationManager.startPositionUpdates(
         locationClient,
@@ -249,6 +252,7 @@ class MethodCallHandlerImpl implements MethodChannel.MethodCallHandler {
           replySubmitted[0] = true;
           geolocationManager.stopPositionUpdates(locationClient);
           pendingCurrentPositionLocationClients.remove(requestId);
+          pendingCurrentPositionReplyFlags.remove(requestId);
           result.success(LocationMapper.toHashMap(location));
         },
         (ErrorCodes errorCode) -> {
@@ -259,6 +263,7 @@ class MethodCallHandlerImpl implements MethodChannel.MethodCallHandler {
           replySubmitted[0] = true;
           geolocationManager.stopPositionUpdates(locationClient);
           pendingCurrentPositionLocationClients.remove(requestId);
+          pendingCurrentPositionReplyFlags.remove(requestId);
           result.error(errorCode.toString(), errorCode.toDescription(), null);
         });
   }
@@ -271,11 +276,21 @@ class MethodCallHandlerImpl implements MethodChannel.MethodCallHandler {
     Map<String, Object> arguments = (Map<String, Object>) call.arguments;
     String requestId = (String) arguments.get("requestId");
 
+    // Mark the pending request as replied BEFORE stopping updates so that any
+    // trailing location callbacks fired after stopPositionUpdates() do not
+    // attempt to reply on an already-abandoned Dart reply port, which would
+    // cause a fatal "Check failed: did_send" crash in the Flutter engine.
+    boolean[] replyFlag = this.pendingCurrentPositionReplyFlags.get(requestId);
+    if (replyFlag != null) {
+      replyFlag[0] = true;
+    }
+
     LocationClient locationClient = this.pendingCurrentPositionLocationClients.get(requestId);
     if (locationClient != null) {
       locationClient.stopPositionUpdates();
     }
     this.pendingCurrentPositionLocationClients.remove(requestId);
+    this.pendingCurrentPositionReplyFlags.remove(requestId);
 
     result.success(null);
   }

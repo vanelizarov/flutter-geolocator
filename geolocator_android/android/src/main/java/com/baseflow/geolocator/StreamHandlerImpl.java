@@ -82,8 +82,6 @@ class StreamHandlerImpl implements EventChannel.StreamHandler {
     }
 
     disposeListeners(false);
-    channel.setStreamHandler(null);
-    channel = null;
   }
 
   @SuppressWarnings({"ConstantConditions", "unchecked"})
