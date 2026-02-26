@@ -7,6 +7,7 @@ import android.content.IntentSender;
 import android.location.Location;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
@@ -36,6 +37,7 @@ class FusedLocationClient implements LocationClient {
   private static final String TAG = "FlutterGeolocator";
 
   private final Context context;
+  private final Handler mainHandler;
   private final LocationCallback locationCallback;
   private final FusedLocationProviderClient fusedLocationProviderClient;
   private final NmeaClient nmeaClient;
@@ -47,6 +49,7 @@ class FusedLocationClient implements LocationClient {
 
   public FusedLocationClient(@NonNull Context context, @Nullable LocationOptions locationOptions) {
     this.context = context;
+    this.mainHandler = new Handler(Looper.getMainLooper());
     this.fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(context);
     this.locationOptions = locationOptions;
     this.nmeaClient = new NmeaClient(context, locationOptions);
@@ -80,7 +83,7 @@ class FusedLocationClient implements LocationClient {
               }
 
               nmeaClient.enrichExtrasWithNmea(location);
-              positionChangedCallback.onPositionChanged(location);
+              mainHandler.post(() -> positionChangedCallback.onPositionChanged(location));
             }).start();
           }
 
@@ -191,7 +194,9 @@ class FusedLocationClient implements LocationClient {
 
     fusedLocationProviderClient
         .getLastLocation()
-        .addOnSuccessListener(positionChangedCallback::onPositionChanged)
+        .addOnSuccessListener(
+            location ->
+                mainHandler.post(() -> positionChangedCallback.onPositionChanged(location)))
         .addOnFailureListener(
             e -> {
               Log.e("Geolocator", "Error trying to get last the last known GPS location");
